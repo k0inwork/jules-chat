@@ -17,7 +17,11 @@ export class ZAiClient {
 
   async testConnection(): Promise<boolean> {
     try {
-      await this.openai.models.list();
+      await this.openai.chat.completions.create({
+        model: 'glm-4.7',
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1
+      });
       return true;
     } catch {
       return false;
@@ -32,7 +36,7 @@ export class ZAiClient {
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'glm-4.7',
         messages: openaiMessages,
         tools: julesTools as any,
         tool_choice: 'auto'
@@ -70,7 +74,7 @@ export class ZAiClient {
 
         // Send back all results to the model
         const toolResponse = await this.openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'glm-4.7',
           messages: [
             ...openaiMessages,
             message,
