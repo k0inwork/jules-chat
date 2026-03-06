@@ -223,9 +223,29 @@ function ActivityItem({ activity, isLast }: { activity: Activity; isLast: boolea
 export function ActivityFeed() {
   const { activities, activitiesLoading, activitiesError, selectedSession } = useJules();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevActivitiesLengthRef = useRef(activities.length);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only scroll to bottom if the user was already near the bottom,
+    // or if this is the initial load (going from 0 to >0 activities).
+    const isInitialLoad = prevActivitiesLengthRef.current === 0 && activities.length > 0;
+
+    // We assume the parent has overflow-y-auto. Let's find it.
+    const scrollParent = bottomRef.current?.closest('.overflow-y-auto');
+
+    let shouldScroll = isInitialLoad;
+    if (scrollParent && !isInitialLoad) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollParent;
+      // If within 100px of the bottom, keep scrolling down
+      shouldScroll = scrollHeight - scrollTop - clientHeight < 100;
+    }
+
+    if (shouldScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    prevActivitiesLengthRef.current = activities.length;
   }, [activities.length]);
 
   if (activitiesLoading && activities.length === 0) {
@@ -266,11 +286,11 @@ export function ActivityFeed() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4" ref={scrollContainerRef}>
       {activities.map((activity, i) => (
         <ActivityItem key={activity.id} activity={activity} isLast={i === activities.length - 1} />
       ))}
-      <div ref={bottomRef} />
+      <div ref={bottomRef} className="h-1" />
     </div>
   );
 }

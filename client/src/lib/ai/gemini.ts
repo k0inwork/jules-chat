@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { executeJulesTool, geminiJulesTools } from './tools';
+import { executeJulesTool, geminiJulesTools, parseInlineToolCalls } from './tools';
+import { OnToolCallFn, OnToolCallCompleteFn } from './index';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -45,11 +46,16 @@ export class GeminiClient {
     return false;
   }
 
-  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(
+    messages: ChatMessage[],
+    appendResponse: (msg: string) => void,
+    onToolCall?: OnToolCallFn,
+    onToolCallComplete?: OnToolCallCompleteFn
+  ): Promise<string> {
     // Gemini requires the history to start with a user message
     const filteredMessages = messages[0]?.role === 'model' ? messages.slice(1) : messages;
 
-    const history = filteredMessages.map((m) => ({
+    const history: any[] = filteredMessages.map((m) => ({
       role: m.role,
       parts: [{ text: m.content }],
     }));
@@ -81,9 +87,22 @@ export class GeminiClient {
 
           appendResponse(`\n*Calling tool ${fnName}...*\n`);
 
+          let logId: string | undefined;
+          if (onToolCall) {
+            logId = onToolCall({
+              provider: 'gemini',
+              functionName: fnName,
+              args: fnArgs,
+              status: 'pending'
+            });
+          }
+
           try {
             const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
             appendResponse(`*Tool ${fnName} completed successfully.*\n`);
+            if (onToolCallComplete && logId) {
+              onToolCallComplete(logId, { status: 'success', result });
+            }
 
               // Send the tool result back to Gemini to get a final response
               const continuationResponse = await this.ai.models.generateContent({
@@ -101,10 +120,74 @@ export class GeminiClient {
 
             } catch (e: any) {
               appendResponse(`*Tool ${fnName} failed: ${e.message}*\n`);
+              if (onToolCallComplete && logId) {
+                onToolCallComplete(logId, { status: 'error', errorMessage: e.message });
+              }
               finalContent += `Failed to execute ${fnName}: ${e.message}`;
             }
           } else if (part.text) {
-            finalContent += part.text;
+            // Check for hallucinated inline tool calls in the text
+            const inlineCalls = parseInlineToolCalls(part.text);
+            if (inlineCalls.length > 0) {
+               let textPart = part.text;
+               for (const call of inlineCalls) {
+                 textPart = textPart.replace(call.rawText, '');
+               }
+               finalContent += textPart;
+
+               let currentHistory = [...history];
+
+               for (const call of inlineCalls) {
+                 const fnName = call.name;
+                 const fnArgs = call.args;
+
+                 appendResponse(`\n*Calling tool ${fnName}...*\n`);
+
+                 let logId: string | undefined;
+                 if (onToolCall) {
+                   logId = onToolCall({
+                     provider: 'gemini',
+                     functionName: fnName,
+                     args: fnArgs,
+                     status: 'pending'
+                   });
+                 }
+
+                 try {
+                   const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
+                   appendResponse(`*Tool ${fnName} completed successfully.*\n`);
+                   if (onToolCallComplete && logId) {
+                     onToolCallComplete(logId, { status: 'success', result });
+                   }
+
+                   // Update the running history so the next tool call (or final response) sees what just happened
+                   currentHistory = [
+                     ...currentHistory,
+                     { role: 'model', parts: [{ functionCall: { name: fnName, args: fnArgs } }] },
+                     { role: 'user', parts: [{ functionResponse: { name: fnName, response: result as Record<string, any> } }] }
+                   ];
+
+                   // Send the tool result back to Gemini to get a final response
+                   const continuationResponse = await this.ai.models.generateContent({
+                     model,
+                     contents: currentHistory
+                   });
+
+                   if (continuationResponse.text) {
+                     finalContent += continuationResponse.text;
+                   }
+
+                 } catch (e: any) {
+                   appendResponse(`*Tool ${fnName} failed: ${e.message}*\n`);
+                   if (onToolCallComplete && logId) {
+                     onToolCallComplete(logId, { status: 'error', errorMessage: e.message });
+                   }
+                   finalContent += `Failed to execute ${fnName}: ${e.message}`;
+                 }
+               }
+            } else {
+               finalContent += part.text;
+            }
           }
         }
 

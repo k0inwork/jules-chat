@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { julesApi, type Session, type Activity, type Source, JulesApiError } from '@/lib/julesApi';
 import { GeminiClient } from '@/lib/ai/gemini';
 import { ZAiClient } from '@/lib/ai/zai';
+import { ToolCallLog } from '@/lib/ai';
 
 const API_KEY_STORAGE = 'jules_api_key';
 const GEMINI_KEY_STORAGE = 'gemini_api_key';
@@ -60,6 +61,12 @@ interface JulesContextValue {
 
   aiProvider: 'gemini' | 'zai';
   setAiProvider: (provider: 'gemini' | 'zai') => void;
+
+  toolLogs: ToolCallLog[];
+  isToolLogsOpen: boolean;
+  toggleToolLogs: () => void;
+  addToolCallLog: (log: Omit<ToolCallLog, 'id' | 'timestamp'>) => string;
+  updateToolCallLog: (id: string, updates: Partial<ToolCallLog>) => void;
 }
 
 const JulesContext = createContext<JulesContextValue | null>(null);
@@ -95,6 +102,9 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
 
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
+
+  const [toolLogs, setToolLogs] = useState<ToolCallLog[]>([]);
+  const [isToolLogsOpen, setIsToolLogsOpen] = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activityPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -309,6 +319,25 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     [apiKey, selectedSessionId, refreshSessions],
   );
 
+  const toggleToolLogs = useCallback(() => {
+    setIsToolLogsOpen(prev => !prev);
+  }, []);
+
+  const addToolCallLog = useCallback((log: Omit<ToolCallLog, 'id' | 'timestamp'>) => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+    const newLog: ToolCallLog = {
+      ...log,
+      id,
+      timestamp: Date.now()
+    };
+    setToolLogs(prev => [...prev, newLog]);
+    return id;
+  }, []);
+
+  const updateToolCallLog = useCallback((id: string, updates: Partial<ToolCallLog>) => {
+    setToolLogs(prev => prev.map(log => log.id === id ? { ...log, ...updates } : log));
+  }, []);
+
   return (
     <JulesContext.Provider
       value={{
@@ -346,6 +375,11 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
         approvePlan,
         createSession,
         deleteSession,
+        toolLogs,
+        isToolLogsOpen,
+        toggleToolLogs,
+        addToolCallLog,
+        updateToolCallLog,
       }}
     >
       {children}
