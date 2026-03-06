@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { executeJulesTool, geminiJulesTools } from './tools';
+import { OnToolCallFn, OnToolCallCompleteFn } from './index';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -45,7 +46,12 @@ export class GeminiClient {
     return false;
   }
 
-  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(
+    messages: ChatMessage[],
+    appendResponse: (msg: string) => void,
+    onToolCall?: OnToolCallFn,
+    onToolCallComplete?: OnToolCallCompleteFn
+  ): Promise<string> {
     // Gemini requires the history to start with a user message
     const filteredMessages = messages[0]?.role === 'model' ? messages.slice(1) : messages;
 
@@ -81,9 +87,22 @@ export class GeminiClient {
 
           appendResponse(`\n*Calling tool ${fnName}...*\n`);
 
+          let logId: string | undefined;
+          if (onToolCall) {
+            logId = onToolCall({
+              provider: 'gemini',
+              functionName: fnName,
+              args: fnArgs,
+              status: 'pending'
+            });
+          }
+
           try {
             const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
             appendResponse(`*Tool ${fnName} completed successfully.*\n`);
+            if (onToolCallComplete && logId) {
+              onToolCallComplete(logId, { status: 'success', result });
+            }
 
               // Send the tool result back to Gemini to get a final response
               const continuationResponse = await this.ai.models.generateContent({
@@ -101,6 +120,9 @@ export class GeminiClient {
 
             } catch (e: any) {
               appendResponse(`*Tool ${fnName} failed: ${e.message}*\n`);
+              if (onToolCallComplete && logId) {
+                onToolCallComplete(logId, { status: 'error', errorMessage: e.message });
+              }
               finalContent += `Failed to execute ${fnName}: ${e.message}`;
             }
           } else if (part.text) {

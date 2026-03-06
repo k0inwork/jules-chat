@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { executeJulesTool, julesTools } from './tools';
 import { ChatMessage } from './gemini';
+import { OnToolCallFn, OnToolCallCompleteFn } from './index';
 
 export class ZAiClient {
   private openai: OpenAI;
@@ -28,7 +29,12 @@ export class ZAiClient {
     }
   }
 
-  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(
+    messages: ChatMessage[],
+    appendResponse: (msg: string) => void,
+    onToolCall?: OnToolCallFn,
+    onToolCallComplete?: OnToolCallCompleteFn
+  ): Promise<string> {
     const openaiMessages: any[] = messages.map(m => ({
       role: m.role === 'model' ? 'assistant' : 'user',
       content: m.content
@@ -54,9 +60,22 @@ export class ZAiClient {
 
           appendResponse(`\n*Calling tool ${fnName}...*\n`);
 
+          let logId: string | undefined;
+          if (onToolCall) {
+            logId = onToolCall({
+              provider: 'zai',
+              functionName: fnName,
+              args: fnArgs,
+              status: 'pending'
+            });
+          }
+
           try {
             const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
             appendResponse(`*Tool ${fnName} completed successfully.*\n`);
+            if (onToolCallComplete && logId) {
+              onToolCallComplete(logId, { status: 'success', result });
+            }
             toolResponses.push({
               role: 'tool',
               tool_call_id: toolCall.id,
@@ -64,6 +83,9 @@ export class ZAiClient {
             });
           } catch (e: any) {
             appendResponse(`*Tool ${fnName} failed: ${e.message}*\n`);
+            if (onToolCallComplete && logId) {
+              onToolCallComplete(logId, { status: 'error', errorMessage: e.message });
+            }
             toolResponses.push({
               role: 'tool',
               tool_call_id: toolCall.id,

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User } from 'lucide-react';
+import { Send, Loader2, Bot, User, TerminalSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useJules } from '@/contexts/JulesContext';
@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { AIClient, AIChatMessage } from '@/lib/ai';
 
 export function AgentChat() {
-  const { apiKey, geminiKey, zaiKey, aiProvider, refreshSessions, refreshActivities, selectedSessionId } = useJules();
+  const { apiKey, geminiKey, zaiKey, aiProvider, refreshSessions, refreshActivities, selectedSessionId, addToolCallLog, updateToolCallLog, toggleToolLogs } = useJules();
   const [messages, setMessages] = useState<AIChatMessage[]>([{
     id: 'welcome',
     role: 'model',
@@ -51,7 +51,7 @@ export function AgentChat() {
 
     try {
       // Send message history (up to current)
-      const finalReply = await aiClient.sendMessage([...messages, userMsg], appendResponse);
+      const finalReply = await aiClient.sendMessage([...messages, userMsg], appendResponse, addToolCallLog, updateToolCallLog);
 
       // Some models return the final text at once, or we might have built it up
       // if finalReply differs from what we built, we set it.
@@ -94,7 +94,21 @@ export function AgentChat() {
 
   return (
     <div className="flex flex-col h-full bg-background relative">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Header bar for tools */}
+      <div className="absolute top-2 right-2 z-10">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 bg-background/80 backdrop-blur-sm shadow-sm text-muted-foreground hover:text-foreground border-border/50"
+          onClick={toggleToolLogs}
+          title="Toggle Debug Tool Logs"
+        >
+          <TerminalSquare className="w-4 h-4" />
+          <span className="text-xs font-medium">Debug Tools</span>
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-12">
         {messages.map((msg) => (
           <div
             key={msg.id}

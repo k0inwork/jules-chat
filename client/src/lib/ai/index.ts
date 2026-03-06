@@ -10,6 +10,20 @@ export interface AIChatMessage {
   content: string;
 }
 
+export interface ToolCallLog {
+  id: string;
+  timestamp: number;
+  provider: AIProvider;
+  functionName: string;
+  args: any;
+  result?: any;
+  status: 'pending' | 'success' | 'error';
+  errorMessage?: string;
+}
+
+export type OnToolCallFn = (log: Omit<ToolCallLog, 'id' | 'timestamp'>) => string;
+export type OnToolCallCompleteFn = (id: string, updates: Partial<ToolCallLog>) => void;
+
 export class AIClient {
   private provider: AIProvider;
   private julesApiKey: string;
@@ -27,7 +41,12 @@ export class AIClient {
     this.provider = provider;
   }
 
-  async sendMessage(messages: AIChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(
+    messages: AIChatMessage[],
+    appendResponse: (msg: string) => void,
+    onToolCall?: OnToolCallFn,
+    onToolCallComplete?: OnToolCallCompleteFn
+  ): Promise<string> {
     const rawMessages: ChatMessage[] = messages.map(m => ({
       role: m.role,
       content: m.content
@@ -35,10 +54,10 @@ export class AIClient {
 
     if (this.provider === 'gemini') {
       const client = new GeminiClient(this.geminiKey, this.julesApiKey);
-      return await client.sendMessage(rawMessages, appendResponse);
+      return await client.sendMessage(rawMessages, appendResponse, onToolCall, onToolCallComplete);
     } else {
       const client = new ZAiClient(this.zaiKey, this.julesApiKey);
-      return await client.sendMessage(rawMessages, appendResponse);
+      return await client.sendMessage(rawMessages, appendResponse, onToolCall, onToolCallComplete);
     }
   }
 }

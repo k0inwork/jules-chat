@@ -9,11 +9,12 @@ import { ApiKeyBar } from '@/components/ApiKeyBar';
 import { SessionList } from '@/components/SessionList';
 import { SessionPanel } from '@/components/SessionPanel';
 import { AgentChat } from '@/components/AgentChat';
+import { ToolLogsPanel } from '@/components/ToolLogsPanel';
 import { useJules } from '@/contexts/JulesContext';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 export default function Home() {
-  const { apiKey } = useJules();
+  const { apiKey, isToolLogsOpen } = useJules();
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden" style={{ backgroundImage: 'radial-gradient(ellipse at 20% 50%, oklch(0.62 0.22 264 / 4%) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, oklch(0.65 0.18 162 / 3%) 0%, transparent 50%)' }}>
@@ -24,8 +25,13 @@ export default function Home() {
 
         {/* Top pane: Agent Chat */}
         <Panel defaultSize={60} minSize={30}>
-          <div className="h-full flex flex-col bg-background">
-            <AgentChat />
+          <div className="h-full flex bg-background relative overflow-hidden">
+            <div className="flex-1 min-w-0">
+              <AgentChat />
+            </div>
+            {isToolLogsOpen && (
+               <ToolLogsPanel />
+            )}
           </div>
         </Panel>
 
