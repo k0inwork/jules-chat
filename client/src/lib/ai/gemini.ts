@@ -15,6 +15,18 @@ export class GeminiClient {
     this.julesApiKey = julesApiKey;
   }
 
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
     // Gemini requires the history to start with a user message
     const filteredMessages = messages[0]?.role === 'model' ? messages.slice(1) : messages;

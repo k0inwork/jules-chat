@@ -1,7 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { julesApi, type Session, type Activity, type Source, JulesApiError } from '@/lib/julesApi';
+import { GeminiClient } from '@/lib/ai/gemini';
+import { ZAiClient } from '@/lib/ai/zai';
 
 const API_KEY_STORAGE = 'jules_api_key';
+const GEMINI_KEY_STORAGE = 'gemini_api_key';
+const ZAI_KEY_STORAGE = 'zai_api_key';
 const POLL_INTERVAL_MS = 5000;
 
 const ACTIVE_STATES = new Set([
@@ -15,9 +19,22 @@ const ACTIVE_STATES = new Set([
 interface JulesContextValue {
   apiKey: string;
   setApiKey: (key: string) => void;
+  geminiKey: string;
+  setGeminiKey: (key: string) => void;
+  zaiKey: string;
+  setZaiKey: (key: string) => void;
+
   isKeyValid: boolean | null; // null = untested
   isKeyTesting: boolean;
   testApiKey: (key: string) => Promise<boolean>;
+
+  isGeminiValid: boolean | null;
+  isGeminiTesting: boolean;
+  testGeminiKey: (key: string) => Promise<boolean>;
+
+  isZaiValid: boolean | null;
+  isZaiTesting: boolean;
+  testZaiKey: (key: string) => Promise<boolean>;
 
   sessions: Session[];
   sessionsLoading: boolean;
@@ -50,10 +67,22 @@ const JulesContext = createContext<JulesContextValue | null>(null);
 export function JulesProvider({ children }: { children: React.ReactNode }) {
   const [aiProvider, setAiProvider] = useState<'gemini' | 'zai'>('gemini');
   const [apiKey, setApiKeyState] = useState<string>(() => {
-    return localStorage.getItem(API_KEY_STORAGE) || '';
+    return localStorage.getItem(API_KEY_STORAGE) || import.meta.env.VITE_JULES_API_KEY || '';
+  });
+  const [geminiKey, setGeminiKeyState] = useState<string>(() => {
+    return localStorage.getItem(GEMINI_KEY_STORAGE) || import.meta.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
+  });
+  const [zaiKey, setZaiKeyState] = useState<string>(() => {
+    return localStorage.getItem(ZAI_KEY_STORAGE) || import.meta.env.Z_API_KEY || import.meta.env.VITE_Z_API_KEY || '';
   });
   const [isKeyValid, setIsKeyValid] = useState<boolean | null>(null);
   const [isKeyTesting, setIsKeyTesting] = useState(false);
+
+  const [isGeminiValid, setIsGeminiValid] = useState<boolean | null>(null);
+  const [isGeminiTesting, setIsGeminiTesting] = useState(false);
+
+  const [isZaiValid, setIsZaiValid] = useState<boolean | null>(null);
+  const [isZaiTesting, setIsZaiTesting] = useState(false);
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -76,6 +105,18 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     setIsKeyValid(null);
   }, []);
 
+  const setGeminiKey = useCallback((key: string) => {
+    setGeminiKeyState(key);
+    localStorage.setItem(GEMINI_KEY_STORAGE, key);
+    setIsGeminiValid(null);
+  }, []);
+
+  const setZaiKey = useCallback((key: string) => {
+    setZaiKeyState(key);
+    localStorage.setItem(ZAI_KEY_STORAGE, key);
+    setIsZaiValid(null);
+  }, []);
+
   const testApiKey = useCallback(async (key: string): Promise<boolean> => {
     if (!key.trim()) return false;
     setIsKeyTesting(true);
@@ -88,6 +129,38 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
       return false;
     } finally {
       setIsKeyTesting(false);
+    }
+  }, []);
+
+  const testGeminiKey = useCallback(async (key: string): Promise<boolean> => {
+    if (!key.trim()) return false;
+    setIsGeminiTesting(true);
+    try {
+      const client = new GeminiClient(key, '');
+      const valid = await client.testConnection();
+      setIsGeminiValid(valid);
+      return valid;
+    } catch {
+      setIsGeminiValid(false);
+      return false;
+    } finally {
+      setIsGeminiTesting(false);
+    }
+  }, []);
+
+  const testZaiKey = useCallback(async (key: string): Promise<boolean> => {
+    if (!key.trim()) return false;
+    setIsZaiTesting(true);
+    try {
+      const client = new ZAiClient(key, '');
+      const valid = await client.testConnection();
+      setIsZaiValid(valid);
+      return valid;
+    } catch {
+      setIsZaiValid(false);
+      return false;
+    } finally {
+      setIsZaiTesting(false);
     }
   }, []);
 
@@ -243,9 +316,19 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
         setAiProvider,
         apiKey,
         setApiKey,
+        geminiKey,
+        setGeminiKey,
+        zaiKey,
+        setZaiKey,
         isKeyValid,
         isKeyTesting,
         testApiKey,
+        isGeminiValid,
+        isGeminiTesting,
+        testGeminiKey,
+        isZaiValid,
+        isZaiTesting,
+        testZaiKey,
         sessions,
         sessionsLoading,
         sessionsError,

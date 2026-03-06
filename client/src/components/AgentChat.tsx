@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { AIClient, AIChatMessage } from '@/lib/ai';
 
 export function AgentChat() {
-  const { apiKey, aiProvider, refreshSessions, refreshActivities, selectedSessionId } = useJules();
+  const { apiKey, geminiKey, zaiKey, aiProvider, refreshSessions, refreshActivities, selectedSessionId } = useJules();
   const [messages, setMessages] = useState<AIChatMessage[]>([{
     id: 'welcome',
     role: 'model',
@@ -16,10 +16,6 @@ export function AgentChat() {
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  // Load API keys from env
-  const geminiKey = import.meta.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
-  const zaiKey = import.meta.env.Z_API_KEY || import.meta.env.VITE_Z_API_KEY || '';
 
   const aiClient = new AIClient(aiProvider, apiKey, geminiKey, zaiKey);
 
@@ -89,7 +85,7 @@ export function AgentChat() {
         <div className="relative z-10 flex flex-col items-center gap-4">
           <h3 className="font-display font-semibold text-foreground mb-1">Connect Jules API First</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Please enter your Jules API key in the top bar to continue. The agent uses this key to interact with Jules on your behalf.
+            Please enter your Jules API key in Settings to continue. The agent uses this key to interact with Jules on your behalf.
           </p>
         </div>
       </div>

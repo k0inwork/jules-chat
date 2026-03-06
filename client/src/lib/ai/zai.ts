@@ -15,6 +15,15 @@ export class ZAiClient {
     this.julesApiKey = julesApiKey;
   }
 
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.openai.models.list();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
     const openaiMessages: any[] = messages.map(m => ({
       role: m.role === 'model' ? 'assistant' : 'user',
