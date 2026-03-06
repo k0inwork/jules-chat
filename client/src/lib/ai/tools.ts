@@ -161,6 +161,55 @@ export const geminiJulesTools = [
   },
 ] as FunctionDeclaration[];
 
+export interface ParsedInlineToolCall {
+  name: string;
+  args: any;
+  rawText: string;
+}
+
+export function parseInlineToolCalls(text: string): ParsedInlineToolCall[] {
+  const results: ParsedInlineToolCall[] = [];
+  // Regex to match <tool_call>FunctionName key=value key="value"...</arg_value>
+  // Or just <tool_call>...</tool_call>
+  // Note: removing 's' flag to fix TypeScript targeting ES2015. We can use [\s\S]* instead of .*? with s flag
+  const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s*([\s\S]*?)(?:<\/arg_value>|<\/tool_call>|>)/g;
+
+  let match;
+  while ((match = toolCallRegex.exec(text)) !== null) {
+    const rawText = match[0];
+    let name = match[1];
+    const argsString = match[2];
+
+    // Map hallucinated names to correct ones
+    if (name === 'getActivities') name = 'listActivities';
+    if (name === 'getSessions') name = 'listSessions';
+
+    const args: any = {};
+    const argRegex = /([a-zA-Z0-9_]+)=("([^"]*)"|'([^']*)'|(\S+))/g;
+    let argMatch;
+    while ((argMatch = argRegex.exec(argsString)) !== null) {
+      const key = argMatch[1];
+      let value = argMatch[3] !== undefined ? argMatch[3] : (argMatch[4] !== undefined ? argMatch[4] : argMatch[5]);
+
+      if (value === undefined) value = "";
+
+      // Convert small number strings to actual numbers, avoid precision loss on IDs
+      if (/^[0-9]+$/.test(value) && value.length < 10) {
+        args[key] = parseInt(value, 10);
+      } else if (value === 'true') {
+        args[key] = true;
+      } else if (value === 'false') {
+        args[key] = false;
+      } else {
+        args[key] = value;
+      }
+    }
+
+    results.push({ name, args, rawText });
+  }
+  return results;
+}
+
 export async function executeJulesTool(
   julesApiKey: string,
   name: string,
