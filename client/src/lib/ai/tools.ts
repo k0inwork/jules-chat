@@ -172,7 +172,7 @@ export function parseInlineToolCalls(text: string): ParsedInlineToolCall[] {
   // Regex to match <tool_call>FunctionName key=value key="value"...</arg_value>
   // Or just <tool_call>...</tool_call>
   // Note: removing 's' flag to fix TypeScript targeting ES2015. We can use [\s\S]* instead of .*? with s flag
-  const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s*([\s\S]*?)(?:<\/arg_value>|<\/tool_call>|>)/g;
+  const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s*([\s\S]*?)(?:<\/arg_value>|<\/tool_call>|>|$)/g;
 
   let match;
   while ((match = toolCallRegex.exec(text)) !== null) {
