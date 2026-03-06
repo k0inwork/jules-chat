@@ -1,13 +1,14 @@
 /**
  * Jules Chat — Main Layout
  * Design: Obsidian Dark Premium Dev Dashboard
- * Layout: Top API key bar + two-column (session list | session panel)
+ * Layout: Top API key bar + three-column (session list | Session Panel | Agent Chat)
  * Colors: Deep charcoal (#0f1117), indigo accent, emerald success
  * Fonts: Space Grotesk (headings), Inter (body), Fira Code (mono)
  */
 import { ApiKeyBar } from '@/components/ApiKeyBar';
 import { SessionList } from '@/components/SessionList';
 import { SessionPanel } from '@/components/SessionPanel';
+import { AgentChat } from '@/components/AgentChat';
 import { useJules } from '@/contexts/JulesContext';
 
 export default function Home() {
@@ -18,7 +19,7 @@ export default function Home() {
       {/* Top bar: API key entry */}
       <ApiKeyBar />
 
-      {/* Main content: two-column layout */}
+      {/* Main content: three-column layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: Session list */}
         <aside
@@ -28,10 +29,18 @@ export default function Home() {
           <SessionList />
         </aside>
 
-        {/* Right panel: Session detail + chat */}
-        <main className="flex-1 overflow-hidden flex flex-col bg-background">
+        {/* Middle panel: Session details */}
+        <main className="flex-1 border-r border-border overflow-hidden flex flex-col bg-background relative">
           <SessionPanel />
         </main>
+
+        {/* Right panel: Agent Chat */}
+        <aside
+          className="flex-shrink-0 overflow-hidden flex flex-col bg-background"
+          style={{ width: '400px' }}
+        >
+          <AgentChat />
+        </aside>
       </div>
     </div>
   );

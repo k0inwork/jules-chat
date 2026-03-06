@@ -40,11 +40,15 @@ interface JulesContextValue {
   approvePlan: (sessionId: string) => Promise<void>;
   createSession: (prompt: string, title?: string, sourceContext?: { source: string; branch: string }, requireApproval?: boolean) => Promise<Session>;
   deleteSession: (sessionId: string) => Promise<void>;
+
+  aiProvider: 'gemini' | 'zai';
+  setAiProvider: (provider: 'gemini' | 'zai') => void;
 }
 
 const JulesContext = createContext<JulesContextValue | null>(null);
 
 export function JulesProvider({ children }: { children: React.ReactNode }) {
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'zai'>('gemini');
   const [apiKey, setApiKeyState] = useState<string>(() => {
     return localStorage.getItem(API_KEY_STORAGE) || '';
   });
@@ -235,6 +239,8 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
   return (
     <JulesContext.Provider
       value={{
+        aiProvider,
+        setAiProvider,
         apiKey,
         setApiKey,
         isKeyValid,

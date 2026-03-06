@@ -35,6 +35,8 @@ export function ApiKeyBar() {
     return null;
   };
 
+  const { aiProvider, setAiProvider } = useJules();
+
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card/80 backdrop-blur-sm" style={{ boxShadow: '0 1px 0 oklch(1 0 0 / 4%)' }}>
       {/* Logo / Brand */}
@@ -43,6 +45,20 @@ export function ApiKeyBar() {
           <span className="text-indigo-400 font-display font-bold text-sm">J</span>
         </div>
         <span className="font-display font-semibold text-sm text-foreground hidden sm:block">Jules Chat</span>
+      </div>
+
+      <div className="w-px h-5 bg-border flex-shrink-0" />
+
+      {/* Model Selection */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <select
+          value={aiProvider}
+          onChange={(e) => setAiProvider(e.target.value as 'gemini' | 'zai')}
+          className="h-7 text-xs font-medium bg-background border-border/60 rounded-md px-2 focus:border-indigo-500/60 focus:ring-indigo-500/20"
+        >
+          <option value="gemini">Gemini</option>
+          <option value="zai">z.ai</option>
+        </select>
       </div>
 
       <div className="w-px h-5 bg-border flex-shrink-0" />
