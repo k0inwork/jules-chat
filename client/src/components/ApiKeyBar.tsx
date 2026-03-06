@@ -3,7 +3,7 @@ import { useJules } from '@/contexts/JulesContext';
 import { SettingsModal } from './SettingsModal';
 
 export function ApiKeyBar() {
-  const { aiProvider, setAiProvider } = useJules();
+  const { aiProvider, setAiProvider, geminiModel, setGeminiModel, zaiModel, setZaiModel } = useJules();
 
   return (
     <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/80 backdrop-blur-sm" style={{ boxShadow: '0 1px 0 oklch(1 0 0 / 4%)' }}>
@@ -27,6 +27,29 @@ export function ApiKeyBar() {
           <option value="gemini">Gemini</option>
           <option value="zai">z.ai</option>
         </select>
+
+        {aiProvider === 'gemini' ? (
+          <select
+            value={geminiModel}
+            onChange={(e) => setGeminiModel(e.target.value)}
+            className="h-7 text-xs font-medium bg-background border-border/60 rounded-md px-2 focus:border-indigo-500/60 focus:ring-indigo-500/20"
+          >
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+            <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+        ) : (
+          <select
+            value={zaiModel}
+            onChange={(e) => setZaiModel(e.target.value)}
+            className="h-7 text-xs font-medium bg-background border-border/60 rounded-md px-2 focus:border-indigo-500/60 focus:ring-indigo-500/20"
+          >
+            <option value="glm-5">glm-5</option>
+            <option value="glm-4.7">glm-4.7</option>
+          </select>
+        )}
       </div>
 
       <div className="w-px h-5 bg-border flex-shrink-0" />

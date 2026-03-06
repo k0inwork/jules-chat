@@ -15,12 +15,16 @@ export class AIClient {
   private julesApiKey: string;
   private geminiKey: string;
   private zaiKey: string;
+  private geminiModel: string;
+  private zaiModel: string;
 
-  constructor(provider: AIProvider, julesApiKey: string, geminiKey: string, zaiKey: string) {
+  constructor(provider: AIProvider, julesApiKey: string, geminiKey: string, zaiKey: string, geminiModel: string, zaiModel: string) {
     this.provider = provider;
     this.julesApiKey = julesApiKey;
     this.geminiKey = geminiKey;
     this.zaiKey = zaiKey;
+    this.geminiModel = geminiModel;
+    this.zaiModel = zaiModel;
   }
 
   setProvider(provider: AIProvider) {
@@ -34,10 +38,10 @@ export class AIClient {
     }));
 
     if (this.provider === 'gemini') {
-      const client = new GeminiClient(this.geminiKey, this.julesApiKey);
+      const client = new GeminiClient(this.geminiKey, this.julesApiKey, this.geminiModel);
       return await client.sendMessage(rawMessages, appendResponse);
     } else {
-      const client = new ZAiClient(this.zaiKey, this.julesApiKey);
+      const client = new ZAiClient(this.zaiKey, this.julesApiKey, this.zaiModel);
       return await client.sendMessage(rawMessages, appendResponse);
     }
   }
