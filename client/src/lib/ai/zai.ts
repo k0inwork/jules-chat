@@ -48,9 +48,40 @@ export class ZAiClient {
       const message = choice.message;
       let finalContent = message.content || "";
 
-      if (message.tool_calls && message.tool_calls.length > 0) {
+      // Check for hallucinated tool calls like `<tool_call>getActivities sessionId=137...`
+      const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*=\s*"?([^"\n\r>]+)"?(?:[\s\S]*?(?:<\/tool_call>|$))?/g;
+      const parsedToolCalls = [];
+
+      let match;
+      while ((match = toolCallRegex.exec(finalContent)) !== null) {
+         const fnName = match[1];
+         const argKey = match[2];
+         const argValue = match[3];
+         parsedToolCalls.push({
+            function: {
+               name: fnName,
+               arguments: JSON.stringify({ [argKey]: argValue })
+            },
+            id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            type: 'function'
+         });
+
+         // Replace the match with something informative
+         finalContent = finalContent.replace(match[0], `\n*[Tool Call: ${fnName}]*\n`);
+      }
+
+      const allToolCalls = [
+        ...(message.tool_calls || []),
+        ...parsedToolCalls
+      ];
+
+      if (allToolCalls.length > 0) {
         const toolResponses: any[] = [];
-        for (const toolCall of message.tool_calls) {
+
+        // Ensure message content is a string
+        const clonedMessage = { ...message, content: finalContent, tool_calls: message.tool_calls || parsedToolCalls };
+
+        for (const toolCall of allToolCalls) {
           const fnName = (toolCall as any).function.name;
           const fnArgs = JSON.parse((toolCall as any).function.arguments);
 
@@ -79,13 +110,13 @@ export class ZAiClient {
           model: this.model,
           messages: [
             ...openaiMessages,
-            message,
+            clonedMessage,
             ...toolResponses
           ]
         });
 
         if (toolResponse.choices[0].message.content) {
-           finalContent += toolResponse.choices[0].message.content;
+           finalContent += "\n\n" + toolResponse.choices[0].message.content;
         }
       }
 
