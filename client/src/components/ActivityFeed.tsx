@@ -29,6 +29,7 @@ function PlanSteps({ steps }: { steps: PlanStep[] }) {
 
 function DiffViewer({ patch }: { patch: string }) {
   const [expanded, setExpanded] = useState(false);
+  if (!patch) return null;
   const lines = patch.split('\n');
   const preview = lines.slice(0, 8);
 
