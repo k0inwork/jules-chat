@@ -17,14 +17,17 @@ const FALLBACK_MODELS = [
 export class GeminiClient {
   private ai: GoogleGenAI;
   private julesApiKey: string;
+  private model: string;
 
-  constructor(apiKey: string, julesApiKey: string) {
+  constructor(apiKey: string, julesApiKey: string, model: string = 'gemini-3.1-pro-preview') {
     this.ai = new GoogleGenAI({ apiKey });
     this.julesApiKey = julesApiKey;
+    this.model = model;
   }
 
   async testConnection(): Promise<boolean> {
-    for (const model of FALLBACK_MODELS) {
+    const modelsToTry = [this.model, ...FALLBACK_MODELS.filter(m => m !== this.model)];
+    for (const model of modelsToTry) {
       try {
         await this.ai.models.generateContent({
           model,
@@ -59,8 +62,9 @@ export class GeminiClient {
     }];
 
     let lastError: any;
+    const modelsToTry = [this.model, ...FALLBACK_MODELS.filter(m => m !== this.model)];
 
-    for (const model of FALLBACK_MODELS) {
+    for (const model of modelsToTry) {
       try {
         const response = await this.ai.models.generateContent({
           model,

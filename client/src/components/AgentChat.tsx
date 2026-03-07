@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { AIClient, AIChatMessage } from '@/lib/ai';
 
 export function AgentChat() {
-  const { apiKey, geminiKey, zaiKey, aiProvider, refreshSessions, refreshActivities, selectedSessionId } = useJules();
+  const { apiKey, geminiKey, zaiKey, aiProvider, geminiModel, zaiModel, refreshSessions, refreshActivities, selectedSessionId } = useJules();
   const [messages, setMessages] = useState<AIChatMessage[]>([{
     id: 'welcome',
     role: 'model',
@@ -17,7 +17,7 @@ export function AgentChat() {
   const [isSending, setIsSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const aiClient = new AIClient(aiProvider, apiKey, geminiKey, zaiKey);
+  const aiClient = new AIClient(aiProvider, apiKey, geminiKey, zaiKey, geminiModel, zaiModel);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,7 +62,7 @@ export function AgentChat() {
       // Refresh the session list and selected activities to update UI based on AI's actions
       await refreshSessions();
       if (selectedSessionId) {
-         await refreshActivities();
+         await refreshActivities(true); // force refresh since tool call likely changed things
       }
 
     } catch (err: any) {

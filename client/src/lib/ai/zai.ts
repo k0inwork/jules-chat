@@ -5,20 +5,22 @@ import { ChatMessage } from './gemini';
 export class ZAiClient {
   private openai: OpenAI;
   private julesApiKey: string;
+  private model: string;
 
-  constructor(apiKey: string, julesApiKey: string) {
+  constructor(apiKey: string, julesApiKey: string, model: string = 'glm-5') {
     this.openai = new OpenAI({
       apiKey,
       baseURL: 'https://api.z.ai/api/coding/paas/v4',
       dangerouslyAllowBrowser: true // This is required for calling OpenAI from the client-side
     });
     this.julesApiKey = julesApiKey;
+    this.model = model;
   }
 
   async testConnection(): Promise<boolean> {
     try {
       await this.openai.chat.completions.create({
-        model: 'glm-4.7',
+        model: this.model,
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 1
       });
@@ -36,7 +38,7 @@ export class ZAiClient {
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'glm-4.7',
+        model: this.model,
         messages: openaiMessages,
         tools: julesTools as any,
         tool_choice: 'auto'
@@ -74,7 +76,7 @@ export class ZAiClient {
 
         // Send back all results to the model
         const toolResponse = await this.openai.chat.completions.create({
-          model: 'glm-4.7',
+          model: this.model,
           messages: [
             ...openaiMessages,
             message,

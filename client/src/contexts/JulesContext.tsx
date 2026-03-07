@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { julesApi, type Session, type Activity, type Source, JulesApiError } from '@/lib/julesApi';
 import { GeminiClient } from '@/lib/ai/gemini';
 import { ZAiClient } from '@/lib/ai/zai';
+import { cacheDb } from '@/lib/cacheDb';
 
 const API_KEY_STORAGE = 'jules_api_key';
 const GEMINI_KEY_STORAGE = 'gemini_api_key';
@@ -48,7 +49,7 @@ interface JulesContextValue {
   activities: Activity[];
   activitiesLoading: boolean;
   activitiesError: string | null;
-  refreshActivities: () => Promise<void>;
+  refreshActivities: (forceRefresh?: boolean) => Promise<void>;
 
   sources: Source[];
   sourcesLoading: boolean;
@@ -60,12 +61,20 @@ interface JulesContextValue {
 
   aiProvider: 'gemini' | 'zai';
   setAiProvider: (provider: 'gemini' | 'zai') => void;
+
+  geminiModel: string;
+  setGeminiModel: (model: string) => void;
+
+  zaiModel: string;
+  setZaiModel: (model: string) => void;
 }
 
 const JulesContext = createContext<JulesContextValue | null>(null);
 
 export function JulesProvider({ children }: { children: React.ReactNode }) {
   const [aiProvider, setAiProvider] = useState<'gemini' | 'zai'>('gemini');
+  const [geminiModel, setGeminiModel] = useState<string>('gemini-3.1-pro-preview');
+  const [zaiModel, setZaiModel] = useState<string>('glm-5');
   const [apiKey, setApiKeyState] = useState<string>(() => {
     return localStorage.getItem(API_KEY_STORAGE) || import.meta.env.VITE_JULES_API_KEY || '';
   });
@@ -136,7 +145,7 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     if (!key.trim()) return false;
     setIsGeminiTesting(true);
     try {
-      const client = new GeminiClient(key, '');
+      const client = new GeminiClient(key, '', geminiModel);
       const valid = await client.testConnection();
       setIsGeminiValid(valid);
       return valid;
@@ -146,13 +155,13 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsGeminiTesting(false);
     }
-  }, []);
+  }, [geminiModel]);
 
   const testZaiKey = useCallback(async (key: string): Promise<boolean> => {
     if (!key.trim()) return false;
     setIsZaiTesting(true);
     try {
-      const client = new ZAiClient(key, '');
+      const client = new ZAiClient(key, '', zaiModel);
       const valid = await client.testConnection();
       setIsZaiValid(valid);
       return valid;
@@ -162,15 +171,25 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsZaiTesting(false);
     }
-  }, []);
+  }, [zaiModel]);
 
   const refreshSessions = useCallback(async () => {
     if (!apiKey) return;
-    setSessionsLoading(true);
+
+    // Optimistically load from cache first
+    const cachedSessions = await cacheDb.getSessions(apiKey);
+    if (cachedSessions && cachedSessions.length > 0) {
+      setSessions(cachedSessions);
+    } else {
+      setSessionsLoading(true);
+    }
+
     setSessionsError(null);
     try {
       const res = await julesApi.listSessions(apiKey, 50);
       setSessions(res.sessions || []);
+      // Update cache in the background
+      cacheDb.saveSessions(apiKey, res.sessions || []).catch(console.error);
     } catch (err) {
       const msg = err instanceof JulesApiError ? err.message : 'Failed to load sessions';
       setSessionsError(msg);
@@ -179,20 +198,50 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     }
   }, [apiKey]);
 
-  const refreshActivities = useCallback(async () => {
+  const lastFetchedSessionUpdateTimes = useRef<Record<string, string>>({});
+
+  const refreshActivities = useCallback(async (forceRefresh = false) => {
     if (!apiKey || !selectedSessionId) return;
-    setActivitiesLoading(true);
+
+    const currentSession = sessions.find(s => s.id === selectedSessionId);
+
+    // Optimistically load from cache first
+    const cachedActivities = await cacheDb.getActivities(apiKey, selectedSessionId);
+    if (cachedActivities && cachedActivities.length > 0) {
+      setActivities(cachedActivities);
+    } else {
+      setActivitiesLoading(true);
+    }
+
     setActivitiesError(null);
     try {
+      // If we're polling, check if the session updateTime has changed
+      if (!forceRefresh && currentSession && currentSession.updateTime) {
+         const lastUpdateTime = lastFetchedSessionUpdateTimes.current[selectedSessionId];
+         if (lastUpdateTime === currentSession.updateTime && cachedActivities) {
+           // Skip network fetch because we know the session hasn't been updated
+           // The cached activities are guaranteed to be up-to-date
+           setActivitiesLoading(false);
+           return;
+         }
+      }
+
       const res = await julesApi.listActivities(apiKey, selectedSessionId, 100);
       setActivities(res.activities || []);
+      // Update cache in the background
+      cacheDb.saveActivities(apiKey, selectedSessionId, res.activities || []).catch(console.error);
+
+      // Record the update time we just fetched for
+      if (currentSession && currentSession.updateTime) {
+        lastFetchedSessionUpdateTimes.current[selectedSessionId] = currentSession.updateTime;
+      }
     } catch (err) {
       const msg = err instanceof JulesApiError ? err.message : 'Failed to load activities';
       setActivitiesError(msg);
     } finally {
       setActivitiesLoading(false);
     }
-  }, [apiKey, selectedSessionId]);
+  }, [apiKey, selectedSessionId, sessions]);
 
   const loadSources = useCallback(async () => {
     if (!apiKey) return;
@@ -235,15 +284,19 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
   // Load activities when session changes
   useEffect(() => {
     if (activityPollTimerRef.current) clearInterval(activityPollTimerRef.current);
-    setActivities([]);
-    if (!selectedSessionId || !apiKey) return;
+    // don't blindly clear activities so we can seamlessly switch/load caches
+    if (!selectedSessionId || !apiKey) {
+       setActivities([]);
+       return;
+    }
 
-    refreshActivities();
+    // Pass forceRefresh=false, relies on cache matching session's updateTime
+    refreshActivities(false);
 
     // Poll activities if session is active
     const session = sessions.find((s) => s.id === selectedSessionId);
     if (session && ACTIVE_STATES.has(session.state)) {
-      activityPollTimerRef.current = setInterval(refreshActivities, POLL_INTERVAL_MS);
+      activityPollTimerRef.current = setInterval(() => refreshActivities(false), POLL_INTERVAL_MS);
     }
 
     return () => {
@@ -260,8 +313,8 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = useCallback(
     async (sessionId: string, prompt: string) => {
       await julesApi.sendMessage(apiKey, sessionId, prompt);
-      // Refresh activities after sending
-      setTimeout(refreshActivities, 1000);
+      // Force refresh activities after sending a message
+      setTimeout(() => refreshActivities(true), 1000);
     },
     [apiKey, refreshActivities],
   );
@@ -270,7 +323,7 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
     async (sessionId: string) => {
       await julesApi.approvePlan(apiKey, sessionId);
       await refreshSessions();
-      setTimeout(refreshActivities, 1000);
+      setTimeout(() => refreshActivities(true), 1000);
     },
     [apiKey, refreshSessions, refreshActivities],
   );
@@ -314,6 +367,10 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
       value={{
         aiProvider,
         setAiProvider,
+        geminiModel,
+        setGeminiModel,
+        zaiModel,
+        setZaiModel,
         apiKey,
         setApiKey,
         geminiKey,
