@@ -49,14 +49,10 @@ export class ZAiClient {
       let finalContent = message.content || "";
 
       // Check for hallucinated tool calls like `<tool_call>getActivities sessionId=137...`
-      const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*=\s*"?([^"\n\r>]+)"?(?:[\s\S]*?(?:<\/tool_call>|$))?/g;
-      const parsedToolCalls = [];
+      const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*=\s*"?([^"<\n\r]+)/g;
+      const parsedToolCalls: any[] = [];
 
-      let match;
-      while ((match = toolCallRegex.exec(finalContent)) !== null) {
-         const fnName = match[1];
-         const argKey = match[2];
-         const argValue = match[3];
+      finalContent = finalContent.replace(toolCallRegex, (match, fnName, argKey, argValue) => {
          parsedToolCalls.push({
             function: {
                name: fnName,
@@ -66,9 +62,11 @@ export class ZAiClient {
             type: 'function'
          });
 
-         // Replace the match with something informative
-         finalContent = finalContent.replace(match[0], `\n*[Tool Call: ${fnName}]*\n`);
-      }
+         return `\n*[Tool Call: ${fnName}]*\n`;
+      });
+
+      // Clean up any dangling closing tags left behind by the simpler regex
+      finalContent = finalContent.replace(/<\/tool_call>|<\/arg_value>/g, '');
 
       const allToolCalls = [
         ...(message.tool_calls || []),
@@ -79,7 +77,7 @@ export class ZAiClient {
         const toolResponses: any[] = [];
 
         // Ensure message content is a string
-        const clonedMessage = { ...message, content: finalContent, tool_calls: message.tool_calls || parsedToolCalls };
+        const clonedMessage = { ...message, content: finalContent, tool_calls: allToolCalls };
 
         for (const toolCall of allToolCalls) {
           const fnName = (toolCall as any).function.name;
