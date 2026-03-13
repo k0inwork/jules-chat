@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { executeJulesTool, geminiJulesTools } from './tools';
+import { parseHallucinatedToolCalls } from './parseTools';
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -66,73 +67,100 @@ export class GeminiClient {
 
     for (const model of modelsToTry) {
       try {
-        const requestPayload = {
-          model,
-          contents: history,
-          config: {
-            tools,
-            systemInstruction: 'You are a helpful coding assistant. You can use the Jules API to manage sessions and fix bugs for the user.',
-          },
-        };
+        let currentContents = [...history];
+        let totalContent = "";
 
-        const response = await this.ai.models.generateContent(requestPayload);
+        while (true) {
+          const requestPayload = {
+            model,
+            contents: currentContents,
+            config: {
+              tools,
+              systemInstruction: 'You are a helpful coding assistant. You can use the Jules API to manage sessions and fix bugs for the user.',
+            },
+          };
 
-        if (onDebugPayload) {
-          onDebugPayload({
-            provider: 'gemini',
-            request: requestPayload,
-            response: response
-          });
-        }
+          const response = await this.ai.models.generateContent(requestPayload);
 
-        let finalContent = "";
+          if (onDebugPayload) {
+            onDebugPayload({
+              provider: 'gemini',
+              request: requestPayload,
+              response: response
+            });
+          }
 
-      const parts = response.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.functionCall) {
-          const fnName = part.functionCall.name || "unknown";
-          const fnArgs = part.functionCall.args;
+          let finalContent = "";
+          const parts = response.candidates?.[0]?.content?.parts || [];
+          const allToolCalls: any[] = [];
+          const currentPartsToSave: any[] = [];
 
-          appendResponse(`\n*Calling tool ${fnName}...*\n`);
+          for (const part of parts) {
+            if (part.functionCall) {
+              allToolCalls.push({
+                name: part.functionCall.name || "unknown",
+                args: part.functionCall.args,
+                originalPart: part
+              });
+              currentPartsToSave.push(part);
+            } else if (part.text) {
+              const { cleanText, toolCalls: hallucinatedToolCalls } = parseHallucinatedToolCalls(part.text);
+              finalContent += cleanText;
+              currentPartsToSave.push({ text: cleanText });
 
-          try {
-            const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
-            appendResponse(`*Tool ${fnName} completed successfully.*\n`);
-
-              // Send the tool result back to Gemini to get a final response
-              const continuationRequestPayload = {
-                 model,
-                 contents: [
-                   ...history,
-                   { role: 'model', parts: [{ functionCall: part.functionCall }] },
-                   { role: 'user', parts: [{ functionResponse: { name: fnName, response: result as Record<string, any> } }] }
-                 ]
-              };
-
-              const continuationResponse = await this.ai.models.generateContent(continuationRequestPayload);
-
-              if (onDebugPayload) {
-                onDebugPayload({
-                  provider: 'gemini',
-                  request: continuationRequestPayload,
-                  response: continuationResponse
+              for (const hCall of hallucinatedToolCalls) {
+                allToolCalls.push({
+                  name: hCall.function.name,
+                  args: JSON.parse(hCall.function.arguments),
+                  isHallucinated: true
                 });
               }
+            }
+          }
 
-              if (continuationResponse.text) {
-                finalContent += continuationResponse.text;
-              }
+          if (finalContent) {
+            totalContent += (totalContent ? "\n\n" : "") + finalContent;
+          }
 
+          if (allToolCalls.length === 0) {
+            // Include any fallback text we might have missed
+            if (!totalContent && response.text) {
+               const { cleanText } = parseHallucinatedToolCalls(response.text);
+               totalContent = cleanText;
+            }
+            break; // No more tool calls, we are done
+          }
+
+          // Save model message
+          currentContents.push({ role: 'model', parts: currentPartsToSave });
+
+          const toolResponses: any[] = [];
+
+          for (const toolCall of allToolCalls) {
+            const fnName = toolCall.name;
+            const fnArgs = toolCall.args;
+
+            appendResponse(`\n*Calling tool ${fnName}...*\n`);
+
+            try {
+              const result = await executeJulesTool(this.julesApiKey, fnName, fnArgs);
+              appendResponse(`*Tool ${fnName} completed successfully.*\n`);
+              toolResponses.push({
+                functionResponse: { name: fnName, response: result as Record<string, any> }
+              });
             } catch (e: any) {
               appendResponse(`*Tool ${fnName} failed: ${e.message}*\n`);
-              finalContent += `Failed to execute ${fnName}: ${e.message}`;
+              toolResponses.push({
+                functionResponse: { name: fnName, response: { error: e.message } }
+              });
             }
-          } else if (part.text) {
-            finalContent += part.text;
           }
+
+          // Save user tool responses
+          currentContents.push({ role: 'user', parts: toolResponses });
         }
 
-        return finalContent || response.text || "";
+        return totalContent;
 
       } catch (e: any) {
         lastError = e;
