@@ -30,19 +30,29 @@ export class ZAiClient {
     }
   }
 
-  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void, onDebugPayload?: (payload: { provider: string; request: any; response: any }) => void): Promise<string> {
     const openaiMessages: any[] = messages.map(m => ({
       role: m.role === 'model' ? 'assistant' : 'user',
       content: m.content
     }));
 
     try {
-      const response = await this.openai.chat.completions.create({
+      const requestPayload = {
         model: this.model,
         messages: openaiMessages,
         tools: julesTools as any,
-        tool_choice: 'auto'
-      });
+        tool_choice: 'auto' as const
+      };
+
+      const response = await this.openai.chat.completions.create(requestPayload);
+
+      if (onDebugPayload) {
+        onDebugPayload({
+          provider: 'zai',
+          request: requestPayload,
+          response: response
+        });
+      }
 
       const choice = response.choices[0];
       const message = choice.message;
@@ -66,7 +76,8 @@ export class ZAiClient {
       });
 
       // Clean up any dangling closing tags left behind by the simpler regex
-      finalContent = finalContent.replace(/<\/tool_call>|<\/arg_value>/g, '');
+      finalContent = finalContent.replace(/<think>[\s\S]*?<\/think>/g, '');
+      finalContent = finalContent.replace(/<\/tool_call>|<\/arg_value>|<\/think>|<think>/g, '');
 
       const allToolCalls = [
         ...(message.tool_calls || []),
@@ -104,14 +115,24 @@ export class ZAiClient {
         }
 
         // Send back all results to the model
-        const toolResponse = await this.openai.chat.completions.create({
+        const toolRequestPayload = {
           model: this.model,
           messages: [
             ...openaiMessages,
             clonedMessage,
             ...toolResponses
           ]
-        });
+        };
+
+        const toolResponse = await this.openai.chat.completions.create(toolRequestPayload as any);
+
+        if (onDebugPayload) {
+          onDebugPayload({
+            provider: 'zai',
+            request: toolRequestPayload,
+            response: toolResponse
+          });
+        }
 
         if (toolResponse.choices[0].message.content) {
            finalContent += "\n\n" + toolResponse.choices[0].message.content;

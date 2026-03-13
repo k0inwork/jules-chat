@@ -75,6 +75,10 @@ interface JulesContextValue {
 
   autoPingInterval: number;
   setAutoPingInterval: (interval: number) => void;
+
+  llmPayloads: { id: string; timestamp: Date; provider: string; request: any; response: any }[];
+  addLlmPayload: (payload: { provider: string; request: any; response: any }) => void;
+  clearLlmPayloads: () => void;
 }
 
 const JulesContext = createContext<JulesContextValue | null>(null);
@@ -121,6 +125,23 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
 
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
+
+  const [llmPayloads, setLlmPayloads] = useState<{ id: string; timestamp: Date; provider: string; request: any; response: any }[]>([]);
+
+  const addLlmPayload = useCallback((payload: { provider: string; request: any; response: any }) => {
+    setLlmPayloads((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: new Date(),
+        ...payload
+      }
+    ]);
+  }, []);
+
+  const clearLlmPayloads = useCallback(() => {
+    setLlmPayloads([]);
+  }, []);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activityPollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -478,6 +499,9 @@ export function JulesProvider({ children }: { children: React.ReactNode }) {
         approvePlan,
         createSession,
         deleteSession,
+        llmPayloads,
+        addLlmPayload,
+        clearLlmPayloads,
       }}
     >
       {children}
