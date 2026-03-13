@@ -31,7 +31,7 @@ export class AIClient {
     this.provider = provider;
   }
 
-  async sendMessage(messages: AIChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(messages: AIChatMessage[], appendResponse: (msg: string) => void, onDebugPayload?: (payload: { provider: string; request: any; response: any }) => void): Promise<string> {
     const rawMessages: ChatMessage[] = messages.map(m => ({
       role: m.role,
       content: m.content
@@ -39,10 +39,10 @@ export class AIClient {
 
     if (this.provider === 'gemini') {
       const client = new GeminiClient(this.geminiKey, this.julesApiKey, this.geminiModel);
-      return await client.sendMessage(rawMessages, appendResponse);
+      return await client.sendMessage(rawMessages, appendResponse, onDebugPayload);
     } else {
       const client = new ZAiClient(this.zaiKey, this.julesApiKey, this.zaiModel);
-      return await client.sendMessage(rawMessages, appendResponse);
+      return await client.sendMessage(rawMessages, appendResponse, onDebugPayload);
     }
   }
 }

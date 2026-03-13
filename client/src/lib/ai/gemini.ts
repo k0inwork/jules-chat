@@ -48,7 +48,7 @@ export class GeminiClient {
     return false;
   }
 
-  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void): Promise<string> {
+  async sendMessage(messages: ChatMessage[], appendResponse: (msg: string) => void, onDebugPayload?: (payload: { provider: string; request: any; response: any }) => void): Promise<string> {
     // Gemini requires the history to start with a user message
     const filteredMessages = messages[0]?.role === 'model' ? messages.slice(1) : messages;
 
@@ -66,14 +66,24 @@ export class GeminiClient {
 
     for (const model of modelsToTry) {
       try {
-        const response = await this.ai.models.generateContent({
+        const requestPayload = {
           model,
           contents: history,
           config: {
             tools,
             systemInstruction: 'You are a helpful coding assistant. You can use the Jules API to manage sessions and fix bugs for the user.',
           },
-        });
+        };
+
+        const response = await this.ai.models.generateContent(requestPayload);
+
+        if (onDebugPayload) {
+          onDebugPayload({
+            provider: 'gemini',
+            request: requestPayload,
+            response: response
+          });
+        }
 
         let finalContent = "";
 
@@ -90,14 +100,24 @@ export class GeminiClient {
             appendResponse(`*Tool ${fnName} completed successfully.*\n`);
 
               // Send the tool result back to Gemini to get a final response
-              const continuationResponse = await this.ai.models.generateContent({
+              const continuationRequestPayload = {
                  model,
                  contents: [
                    ...history,
                    { role: 'model', parts: [{ functionCall: part.functionCall }] },
                    { role: 'user', parts: [{ functionResponse: { name: fnName, response: result as Record<string, any> } }] }
                  ]
-              });
+              };
+
+              const continuationResponse = await this.ai.models.generateContent(continuationRequestPayload);
+
+              if (onDebugPayload) {
+                onDebugPayload({
+                  provider: 'gemini',
+                  request: continuationRequestPayload,
+                  response: continuationResponse
+                });
+              }
 
               if (continuationResponse.text) {
                 finalContent += continuationResponse.text;

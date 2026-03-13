@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { AIClient, AIChatMessage } from '@/lib/ai';
 
 export function AgentChat() {
-  const { apiKey, geminiKey, zaiKey, aiProvider, geminiModel, zaiModel, refreshSessions, refreshActivities, selectedSessionId } = useJules();
+  const { apiKey, geminiKey, zaiKey, aiProvider, geminiModel, zaiModel, refreshSessions, refreshActivities, selectedSessionId, addLlmPayload } = useJules();
   const [messages, setMessages] = useState<AIChatMessage[]>([{
     id: 'welcome',
     role: 'model',
@@ -51,7 +51,7 @@ export function AgentChat() {
 
     try {
       // Send message history (up to current)
-      const finalReply = await aiClient.sendMessage([...messages, userMsg], appendResponse);
+      const finalReply = await aiClient.sendMessage([...messages, userMsg], appendResponse, addLlmPayload);
 
       // Some models return the final text at once, or we might have built it up
       // if finalReply differs from what we built, we set it.
