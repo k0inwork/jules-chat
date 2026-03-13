@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { executeJulesTool, julesTools } from './tools';
 import { ChatMessage } from './gemini';
+import { parseHallucinatedToolCalls } from './parseTools';
 
 export class ZAiClient {
   private openai: OpenAI;
@@ -37,58 +38,53 @@ export class ZAiClient {
     }));
 
     try {
-      const requestPayload = {
-        model: this.model,
-        messages: openaiMessages,
-        tools: julesTools as any,
-        tool_choice: 'auto' as const
-      };
+      let currentMessages = [...openaiMessages];
+      let totalContent = "";
 
-      const response = await this.openai.chat.completions.create(requestPayload);
+      while (true) {
+        const requestPayload = {
+          model: this.model,
+          messages: currentMessages,
+          tools: julesTools as any,
+          tool_choice: 'auto' as const
+        };
 
-      if (onDebugPayload) {
-        onDebugPayload({
-          provider: 'zai',
-          request: requestPayload,
-          response: response
-        });
-      }
+        const response = await this.openai.chat.completions.create(requestPayload);
 
-      const choice = response.choices[0];
-      const message = choice.message;
-      let finalContent = message.content || "";
+        if (onDebugPayload) {
+          onDebugPayload({
+            provider: 'zai',
+            request: requestPayload,
+            response: response
+          });
+        }
 
-      // Check for hallucinated tool calls like `<tool_call>getActivities sessionId=137...`
-      const toolCallRegex = /<tool_call>\s*([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)\s*=\s*"?([^"<\n\r]+)/g;
-      const parsedToolCalls: any[] = [];
+        const choice = response.choices[0];
+        const message = choice.message;
+        let finalContent = message.content || "";
 
-      finalContent = finalContent.replace(toolCallRegex, (match, fnName, argKey, argValue) => {
-         parsedToolCalls.push({
-            function: {
-               name: fnName,
-               arguments: JSON.stringify({ [argKey]: argValue })
-            },
-            id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            type: 'function'
-         });
+        // Check for hallucinated tool calls
+        const { cleanText, toolCalls: parsedToolCalls } = parseHallucinatedToolCalls(finalContent);
+        finalContent = cleanText;
 
-         return `\n*[Tool Call: ${fnName}]*\n`;
-      });
+        if (finalContent) {
+          totalContent += (totalContent ? "\n\n" : "") + finalContent;
+        }
 
-      // Clean up any dangling closing tags left behind by the simpler regex
-      finalContent = finalContent.replace(/<think>[\s\S]*?<\/think>/g, '');
-      finalContent = finalContent.replace(/<\/tool_call>|<\/arg_value>|<\/think>|<think>/g, '');
+        const allToolCalls = [
+          ...(message.tool_calls || []),
+          ...parsedToolCalls
+        ];
 
-      const allToolCalls = [
-        ...(message.tool_calls || []),
-        ...parsedToolCalls
-      ];
+        if (allToolCalls.length === 0) {
+          break; // No more tool calls, we are done
+        }
 
-      if (allToolCalls.length > 0) {
         const toolResponses: any[] = [];
 
         // Ensure message content is a string
         const clonedMessage = { ...message, content: finalContent, tool_calls: allToolCalls };
+        currentMessages.push(clonedMessage);
 
         for (const toolCall of allToolCalls) {
           const fnName = (toolCall as any).function.name;
@@ -114,32 +110,10 @@ export class ZAiClient {
           }
         }
 
-        // Send back all results to the model
-        const toolRequestPayload = {
-          model: this.model,
-          messages: [
-            ...openaiMessages,
-            clonedMessage,
-            ...toolResponses
-          ]
-        };
-
-        const toolResponse = await this.openai.chat.completions.create(toolRequestPayload as any);
-
-        if (onDebugPayload) {
-          onDebugPayload({
-            provider: 'zai',
-            request: toolRequestPayload,
-            response: toolResponse
-          });
-        }
-
-        if (toolResponse.choices[0].message.content) {
-           finalContent += "\n\n" + toolResponse.choices[0].message.content;
-        }
+        currentMessages.push(...toolResponses);
       }
 
-      return finalContent;
+      return totalContent;
     } catch (e: any) {
       console.error(e);
       throw e;
