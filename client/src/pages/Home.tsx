@@ -28,10 +28,21 @@ export default function Home() {
 
         {/* Left pane: Agent Chat */}
         <Panel defaultSize={showDebug ? 30 : 40} minSize={25}>
-          <div className="h-full flex flex-col bg-background border-r border-border relative">
+          <div className="h-full flex flex-col bg-background border-r border-border">
             <AgentChat />
+          </div>
+        </Panel>
 
-            {/* Debug panel toggle button floating on the right edge of Agent Chat */}
+        <PanelResizeHandle className="w-1 bg-border hover:bg-indigo-500/50 transition-colors" />
+
+        {/* Middle pane: Session details */}
+        <Panel defaultSize={showDebug ? 45 : 60} minSize={30}>
+          <div className="h-full flex overflow-hidden relative">
+            <main className="flex-1 overflow-hidden flex flex-col bg-background relative border-r border-border">
+              <SessionPanel />
+            </main>
+
+            {/* Debug panel toggle button floating on the right edge of Session details */}
             {!showDebug && (
               <Button
                 variant="outline"
@@ -46,13 +57,12 @@ export default function Home() {
           </div>
         </Panel>
 
-        <PanelResizeHandle className="w-1 bg-border hover:bg-indigo-500/50 transition-colors" />
-
-        {/* Middle pane: Debug Panel (collapsible) */}
+        {/* Right pane: Debug Panel (collapsible) */}
         {showDebug && (
           <>
+            <PanelResizeHandle className="w-1 bg-border hover:bg-indigo-500/50 transition-colors" />
             <Panel defaultSize={25} minSize={15} maxSize={40}>
-              <div className="h-full relative border-r border-border bg-background">
+              <div className="h-full relative bg-background">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -65,18 +75,8 @@ export default function Home() {
                 <LLMDebugPanel />
               </div>
             </Panel>
-            <PanelResizeHandle className="w-1 bg-border hover:bg-indigo-500/50 transition-colors" />
           </>
         )}
-
-        {/* Right pane: Session details */}
-        <Panel defaultSize={showDebug ? 45 : 60} minSize={30}>
-          <div className="h-full flex overflow-hidden">
-            <main className="flex-1 overflow-hidden flex flex-col bg-background relative">
-              <SessionPanel />
-            </main>
-          </div>
-        </Panel>
 
       </PanelGroup>
     </div>
